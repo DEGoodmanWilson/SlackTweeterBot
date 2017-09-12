@@ -1,0 +1,10 @@
+source 'http://rubygems.org'
+ruby '2.3.3'
+
+gem 'sinatra'
+gem 'slack-ruby-client'
+gem 'mongo'
+gem 'nokogiri'
+gem 'twitter'
+gem 'oauth'
+gem 'faraday'
