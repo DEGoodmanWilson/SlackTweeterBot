@@ -193,11 +193,14 @@ class Events < Sinatra::Base
       commands = match[2].strip.split(' ')
 
       case commands[0]
-        when 'configure'
-            link = 'https://' + ENV['HOST'] + '/install_twitter/' + @team_id +'/' + message['channel']
-            @client.chat_postMessage channel: message['channel'], text: 'Please click here to authorize Twitter! ' + link
+        when 'twitter'
+          link = 'https://' + ENV['HOST'] + '/install_twitter/' + @team_id +'/' + message['channel']
+          @client.chat_postMessage channel: message['channel'], text: 'Please click here to authorize Twitter! ' + link
+        when 'buffer'
+          link = 'https://' + ENV['HOST'] + '/install_buffer/' + @team_id +'/' + message['channel']
+          @client.chat_postMessage channel: message['channel'], text: 'Please click here to authorize Twitter! ' + link
         else
-            @client.chat_postMessage channel: message['channel'], text: 'howdy!'
+          @client.chat_postMessage channel: message['channel'], text: 'howdy!'
       end
 
       halt 200

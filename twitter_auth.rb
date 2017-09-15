@@ -59,7 +59,9 @@ class TwitterAuth < Sinatra::Base
   get '/install_twitter/finish/:team_id/:channel_id' do
     consumer = get_consumer
 
-    request_token = $temp_table.find({team_id: params[:team_id], channel_id: params[:channel_id]}).first
+    docs = $temp_table.find({team_id: params[:team_id], channel_id: params[:channel_id]})
+    request_token = docs.first
+    docs.delete_many
 
     puts request_token[:request_token]
 

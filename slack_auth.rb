@@ -76,7 +76,8 @@ class SlackAuth < Sinatra::Base
           user_access_token: response['access_token'],
           bot_user_id: response['bot']['bot_user_id'],
           bot_access_token: response['bot']['bot_access_token'],
-          twitter_tokens: {}
+          twitter_tokens: {},
+          buffer_tokens: {}
       }
 
       # let's attempt some kind of upsert, replacing rows that are already there, inserting otherwise
