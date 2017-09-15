@@ -112,6 +112,7 @@ class Events < Sinatra::Base
     # Just take the first link.
 
     response = Faraday.get links[0]
+
     # We are now in our own thread, operating asynchronously. We can take our time here.
 
     # First, we use Nokogiri to extract the page title.
@@ -173,6 +174,9 @@ class Events < Sinatra::Base
     # Does the message satisfy the rule above? Tweet links in it!
     if is_in_public_channel && !is_addressed_to_us
       verify_twitter! message['channel']
+
+      # TODO make this async!
+
       tweet = tweet_format message
 
       halt if tweet.nil? # ignore if there are no links
