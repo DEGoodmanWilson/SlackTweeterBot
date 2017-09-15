@@ -6,6 +6,7 @@ def create_slack_client(slack_api_secret)
     config.token = slack_api_secret
     fail 'Missing API token' unless config.token
   end
+  # Slack::Web::Client.new( endpoint: 'http://localhost:3000/api')
   Slack::Web::Client.new
 end
 

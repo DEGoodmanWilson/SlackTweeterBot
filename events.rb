@@ -18,13 +18,11 @@ class Events < Sinatra::Base
     begin
       @request_data = JSON.parse(body)
     rescue JSON::ParserError
-      error = true
-    end
-
-    # Check the verification token provided with the request to make sure it matches the verification token in
-    # your app's setting to confirm that the request came from Slack.
-    unless SLACK_CONFIG[:slack_verification_token] == @request_data['token']
-      halt 403, "Invalid Slack verification token received: #{@request_data['token']}"
+      begin
+        @request_data = JSON.parse(URI.decode body.split('=')[-1])
+      rescue JSON::ParserError
+        error = true
+      end
     end
 
     if error
@@ -35,6 +33,12 @@ class Events < Sinatra::Base
       rescue JSON::ParserError => e
         halt 419, "Malformed event payload"
       end
+    end
+
+    # Check the verification token provided with the request to make sure it matches the verification token in
+    # your app's setting to confirm that the request came from Slack.
+    unless SLACK_CONFIG[:slack_verification_token] == @request_data['token']
+      halt 403, "Invalid Slack verification token received: #{@request_data['token']}"
     end
 
     # What team generated this event?
@@ -73,17 +77,14 @@ class Events < Sinatra::Base
   #
 
   def verify_twitter! channel
-    response ='Please configure a Twitter account with `@tweeterbot configure`'
+    response ='Please configure a Twitter account with `@tweeterbot twitter` or `@tweeterbot buffer`'
 
-    twitter_tokens = @token['twitter_tokens'] || nil
-    unless twitter_tokens
-      @client.chat_postMessage channel: channel, text: response
-      halt 200
-    end
-
+    twitter_token = @token['twitter_tokens'] || nil
+    buffer_token = @token['buffer_tokens'] || nil
     @twitter_token = @token['twitter_tokens'][channel] || nil
+    @buffer_token = @token['buffer_tokens'][channel] || nil
 
-    unless @twitter_token
+    unless @twitter_token || @buffer_token
       @client.chat_postMessage channel: channel, text: response
       halt 200
     end
@@ -91,7 +92,7 @@ class Events < Sinatra::Base
 
   # This method takes a `message` event that should be indexed, extracts all the links in that message, opens each of those
   # links (asynchronously of course!), flattens the HTML into plaintext, and crafts a tweet out of the result.
-  def tweet message
+  def tweet_format message
 
     # We begin the hunt for links. The good news is that Slack marks them out for us!
     # Links look like:
@@ -125,14 +126,8 @@ class Events < Sinatra::Base
         title = title[0..-delta-2] + '…'
       end
 
-      tweet = title + ' ' + link
+      return title + ' ' + link
 
-      # if res
-      #   # Upon success, let's let the user know by adding a reactji to their message
-      # client.reactions_add name: 'bird', channel: message['channel'], timestamp: message['ts']
-      @client.chat_postMessage channel: message['channel'], text: '> ' + tweet
-      # end
-      # end
     end
   end
 
@@ -177,8 +172,30 @@ class Events < Sinatra::Base
     # Does the message satisfy the rule above? Index it!
     if is_in_public_channel && !is_addressed_to_us
       verify_twitter! message['channel']
-      tweet message
-      halt 200
+      tweet = tweet_format message
+
+      attachments = [{
+                         text: 'Tweet this?',
+                         callback_id: 'tweeter_tweet',
+                         actions: [
+                             {
+                                 name: 'ignore',
+                                 text: 'Ignore',
+                                 type: 'button',
+                                 value: 'Ignore'
+                             }
+                         ]}]
+
+      twitter_button = { name: 'tweet', text: 'Tweet', type: 'button', value: 'Tweet' }
+      attachments[0][:actions].append twitter_button if @twitter_token
+
+      twitter_button = { name: 'buffer', text: 'Buffer', type: 'button', value: 'Buffer' }
+      attachments[0][:actions].append twitter_button if @buffer_token
+
+      @client.chat_postMessage channel: message['channel'], text: '> ' + tweet,
+                               attachments: attachments
+      status 200
+      halt ""
     end
 
     # The other rule is: If the message is meant for us, then run a command. A message meant for us is a message
