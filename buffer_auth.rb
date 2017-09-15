@@ -1,5 +1,4 @@
 require 'sinatra/base'
-require 'twitter'
 require 'mongo'
 require 'erb'
 require 'oauth2'

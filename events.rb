@@ -4,6 +4,7 @@ require 'mongo'
 require 'nokogiri'
 require 'uri'
 require 'json'
+require 'buffer'
 require_relative 'helpers'
 
 # Fly me to the moon, let me dance among the stars...
@@ -77,21 +78,20 @@ class Events < Sinatra::Base
   #
 
   def verify_twitter! channel
-    response ='Please configure a Twitter account with `@tweeterbot twitter` or `@tweeterbot buffer`'
+    response ='Please configure a Buffer account with `@tweeterbot buffer`'
 
-    twitter_token = @token['twitter_tokens'] || nil
-    buffer_token = @token['buffer_tokens'] || nil
-    @twitter_token = @token['twitter_tokens'][channel] || nil
-    @buffer_token = @token['buffer_tokens'][channel] || nil
+    buffer_tokens = @token['buffer_tokens'][channel] || nil
 
-    unless @twitter_token || @buffer_token
+    unless buffer_tokens
       @client.chat_postMessage channel: channel, text: response
-      halt 200
+      halt
     end
+
+    @buffer_token = buffer_tokens['oauth_token']
   end
 
-  # This method takes a `message` event that should be indexed, extracts all the links in that message, opens each of those
-  # links (asynchronously of course!), flattens the HTML into plaintext, and crafts a tweet out of the result.
+  # This method takes a `message` event that should be indexed, extracts all the links in that message, opens the first
+  # of those links (asynchronously of course!), flattens the HTML into plaintext, and crafts a tweet out of the result.
   def tweet_format message
 
     # We begin the hunt for links. The good news is that Slack marks them out for us!
@@ -107,8 +107,9 @@ class Events < Sinatra::Base
       links.append url #URI.encode url
     end
 
+    return nil if links.length == 0 #return nil if no links found
+
     # Just take the first link.
-    return nil if links.length == 0
 
     response = Faraday.get links[0]
     # We are now in our own thread, operating asynchronously. We can take our time here.
@@ -129,8 +130,7 @@ class Events < Sinatra::Base
       title = title[0..-delta-2] + '…'
     end
 
-    return title + ' ' + links[0]
-
+    title + ' ' + links[0]
   end
 
 
@@ -154,7 +154,6 @@ class Events < Sinatra::Base
     # First of all, ignore all message originating from us
     halt 200 if message['user'] == @token['bot_user_id']
 
-
     # at this point, lots of things could happen.
     # This could be an ambient message that we should scan for links to tweet
     # Or this could be a message directed at _us_, in which case we should treat it as a command.
@@ -171,35 +170,35 @@ class Events < Sinatra::Base
     # Is it in a public channel?
     is_in_public_channel = message['channel'][0] == 'C'
 
-    # Does the message satisfy the rule above? Index it!
+    # Does the message satisfy the rule above? Tweet links in it!
     if is_in_public_channel && !is_addressed_to_us
       verify_twitter! message['channel']
       tweet = tweet_format message
 
-      halt if tweet.nil?
+      halt if tweet.nil? # ignore if there are no links
 
-      attachments = [{
-                         text: 'Tweet this?',
-                         callback_id: 'tweeter_tweet',
-                         actions: [
-                             {
-                                 name: 'ignore',
-                                 text: 'Ignore',
-                                 type: 'button',
-                                 value: 'Ignore'
-                             }
-                         ]}]
+      ## Tweet that shit!
+      client = Buffer::Client.new(@buffer_token)
 
-      twitter_button = {name: 'tweet', text: 'Tweet', type: 'button', value: 'Tweet'}
-      attachments[0][:actions].append twitter_button if @twitter_token
+      ## Indeed, we will send it to _all_ Twitter accounts. We just need to fidn them first
 
-      twitter_button = {name: 'buffer', text: 'Buffer', type: 'button', value: 'Buffer'}
-      attachments[0][:actions].append twitter_button if @buffer_token
+      profiles = client.profiles
 
-      @client.chat_postMessage channel: message['channel'], text: '> ' + tweet,
-                               attachments: attachments
-      status 200
-      halt ""
+      twitters = []
+      profiles.each do |profile|
+        twitters.append profile.id if profile.service == 'twitter'
+      end
+
+      client.create_update(
+          body: {
+              text: tweet,
+              profile_ids: twitters
+          },
+      )
+
+      @client.chat_postMessage channel: message['channel'], text: '> ' + tweet
+
+      halt
     end
 
     # The other rule is: If the message is meant for us, then run a command. A message meant for us is a message
@@ -208,15 +207,12 @@ class Events < Sinatra::Base
 
       # Format: @tweeterbot command params
 
-      # Supported commands: config[ure]
+      # Supported commands: buffer
 
       match = Regexp.new('(<@'+@token['bot_user_id']+'>:?)?(.*)').match message['text']
       commands = match[2].strip.split(' ')
 
       case commands[0]
-        when 'twitter'
-          link = 'https://' + ENV['HOST'] + '/install_twitter/' + @team_id +'/' + message['channel']
-          @client.chat_postMessage channel: message['channel'], text: 'Please click here to authorize Twitter! ' + link
         when 'buffer'
           link = 'https://' + ENV['HOST'] + '/install_buffer/' + @team_id +'/' + message['channel']
           @client.chat_postMessage channel: message['channel'], text: 'Please click here to authorize Twitter! ' + link
@@ -224,32 +220,11 @@ class Events < Sinatra::Base
           @client.chat_postMessage channel: message['channel'], text: 'howdy!'
       end
 
-      halt 200
+      halt
     end
 
     # else, do nothing. Ignore the message.
     status 200
   end
 
-
-  # Here is the endpoint for handling message actions
-  # We end up here if someone clicked a button in one of our messages.
-  post '/buttons' do
-
-    # # So, someone hit "prev" or "next". Our job is to figure out
-    # # a) what they were looking at and
-    # # b) where they want to go
-    # # c) and then reconstruct the message with the new data
-    #
-    # query_str = @request_data['callback_id'] # we stored the query in the callback id, so clever!
-    # new_page = @request_data['actions'][0]['value'].to_i # and the new page to fetch here.
-    #
-    # #we have enough to run the query!
-    # response = query query_str, new_page
-    #
-    # # Rather than posting a new message, we'll just respond with the new message to replace the old message! It's like a carousel
-    # content_type :json
-    # response.to_json
-    status 200
-  end
 end
