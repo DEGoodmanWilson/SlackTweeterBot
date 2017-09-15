@@ -23,6 +23,9 @@ class Events < Sinatra::Base
         @request_data = JSON.parse(URI.decode body.split('=')[-1])
       rescue JSON::ParserError
         error = true
+      else
+        puts body
+        error = true
       end
     end
 
@@ -50,7 +53,7 @@ class Events < Sinatra::Base
     # Load up the Slack application tokens for this team and put them where we can reach them.
     @token = $tokens.find({team_id: @team_id}).first
 
-    @client = create_slack_client(@token['bot_access_token'])
+    @client = create_slack_client(@token['bot_access_token']) unless @token.nil?
 
   end
 
