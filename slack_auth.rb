@@ -56,7 +56,7 @@ class SlackAuth < Sinatra::Base
           {
               client_id: SLACK_CONFIG[:slack_client_id],
               client_secret: SLACK_CONFIG[:slack_api_secret],
-              redirect_uri: SLACK_CONFIG[:slack_host]+'/finish_slack_auth',
+              redirect_uri: 'https://'+ENV['HOST']+'/install/finish',
               code: params[:code] # (This is the OAuth code mentioned above)
           }
       )

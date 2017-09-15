@@ -20,7 +20,7 @@ class Events < Sinatra::Base
       @request_data = JSON.parse(body)
     rescue JSON::ParserError
       begin
-        @request_data = JSON.parse(URI.decode body.split('=')[-1])
+        @request_data = JSON.parse(URI.decode body.split('=')[-1] || '')
       rescue JSON::ParserError
         error = true
       end
