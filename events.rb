@@ -12,7 +12,7 @@ class Events < Sinatra::Base
 
   # This function contains code common to all endpoints: JSON extraction, setting up some instance variables, and checking verification tokens (for security)
   before do
-    body = request.body.read
+    body = request.body.read || ""
 
     # Extract the Event payload from the request and parse the JSON. We can reasonably assume this will be present
     error = false
@@ -22,9 +22,6 @@ class Events < Sinatra::Base
       begin
         @request_data = JSON.parse(URI.decode body.split('=')[-1])
       rescue JSON::ParserError
-        error = true
-      else
-        puts body
         error = true
       end
     end
