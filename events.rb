@@ -100,35 +100,37 @@ class Events < Sinatra::Base
     # or
     # <http://google.com|Google!>
     # We want to ignore the label, and just get the URL
+
     links = []
     message['text'].scan(/<(https?:\/\/.+?)>/).each do |m|
       url = m[0].split('|')[0]
       links.append url #URI.encode url
     end
 
-    links.each do |link|
-      response = Faraday.get link
-      # We are now in our own thread, operating asynchronously. We can take our time here.
+    # Just take the first link.
+    return nil if links.length == 0
 
-      # First, we use Nokogiri to extract the page title.
-      page = Nokogiri::HTML(response.body)
-      page.css('script, link, style').each {|node| node.remove}
-      title = page.css('title').text
+    response = Faraday.get links[0]
+    # We are now in our own thread, operating asynchronously. We can take our time here.
 
-      # Now craft a tweet message; remember max is 140 chars!
+    # First, we use Nokogiri to extract the page title.
+    page = Nokogiri::HTML(response.body)
+    page.css('script, link, style').each {|node| node.remove}
+    title = page.css('title').text
 
-      # First, check the current max length of a t.co link wrapper
-      # TODO
-      t_co = 20
-      length = title.length + t_co + 1 # 1 for the space.
-      delta = length - 140
-      if delta > 0
-        title = title[0..-delta-2] + '…'
-      end
+    # Now craft a tweet message; remember max is 140 chars!
 
-      return title + ' ' + link
-
+    # First, check the current max length of a t.co link wrapper
+    # TODO
+    t_co = 20
+    length = title.length + t_co + 1 # 1 for the space.
+    delta = length - 140
+    if delta > 0
+      title = title[0..-delta-2] + '…'
     end
+
+    return title + ' ' + links[0]
+
   end
 
 
@@ -174,6 +176,8 @@ class Events < Sinatra::Base
       verify_twitter! message['channel']
       tweet = tweet_format message
 
+      halt if tweet.nil?
+
       attachments = [{
                          text: 'Tweet this?',
                          callback_id: 'tweeter_tweet',
@@ -186,10 +190,10 @@ class Events < Sinatra::Base
                              }
                          ]}]
 
-      twitter_button = { name: 'tweet', text: 'Tweet', type: 'button', value: 'Tweet' }
+      twitter_button = {name: 'tweet', text: 'Tweet', type: 'button', value: 'Tweet'}
       attachments[0][:actions].append twitter_button if @twitter_token
 
-      twitter_button = { name: 'buffer', text: 'Buffer', type: 'button', value: 'Buffer' }
+      twitter_button = {name: 'buffer', text: 'Buffer', type: 'button', value: 'Buffer'}
       attachments[0][:actions].append twitter_button if @buffer_token
 
       @client.chat_postMessage channel: message['channel'], text: '> ' + tweet,
